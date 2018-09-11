@@ -1,0 +1,3 @@
+Copy gitssh to /usr/bin/gitssh and then...
+
+export GIT_SSH=/usr/bin/gitssh
