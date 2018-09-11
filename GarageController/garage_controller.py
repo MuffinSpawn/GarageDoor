@@ -22,15 +22,16 @@ class GarageController(threading.Thread):
                 'Open', 'Open/Activated', '', '',
                 'FullyOpen', 'FullyOpen/Activated']
 
-  def __init__(self, iot):
+  def __init__(self):
     threading.Thread.__init__(self)
     self._running = False
     self._state = 0
     self._temperature = 0.0
+    self.remotely_activated = False
 
   @property
   def state(self):
-    return self._state
+    return GarageController.STATE_NAMES[self._state]
 
   @property
   def temperature(self):
@@ -48,7 +49,7 @@ class GarageController(threading.Thread):
 
   @classmethod
   def getCircuitPlaygroundData(cls, i2c):
-    sensor_data = i2c.readBytes(0x12, 0x00, DATA_SIZE)
+    sensor_data = i2c.readBytes(0x12, 0x00, GarageController.DATA_SIZE)
     calculated_checksum = GarageController.fletcher16(sensor_data[:-2])
 
     checksum = 0
@@ -107,7 +108,8 @@ class GarageController(threading.Thread):
             self._temperature = new_temperature
           # logger.debug('Temperature: {}*C'.format(temperature))
 
-          if self._remotely_activated:
+          if self.remotely_activated:
+            self.remotely_activated = False
             logger.info('Requesting Activation...')
             i2c.writeBytes(0x12, 0x00, [0xAA])
 
@@ -122,16 +124,26 @@ class GarageController(threading.Thread):
 garage_controller = GarageController()
 app = flask.Flask(__name__)
 
-@app.route('/', methods=['GET'])
+@app.route('/', methods=['GET','PUT'])
+@app.route('/summary', methods=['GET','PUT'])
 def summary():
   return flask.render_template(
     'summary.html',
-    state=STATE_NAMES[garage_controller.state],
+    state=garage_controller.state,
     temperature=garage_controller.temperature)
 
 @app.route('/json', methods=['GET'])
-def summary():
+def data():
   return flask.jsonify(state=garage_controller.state, temperature=garage_controller.temperature)
+
+'''
+payload = {'username': 'bob', 'email': 'bob@bob.com'}
+>>> r = requests.put("http://somedomain.org/endpoint", data=payload)
+'''
+@app.route('/activate', methods=['PUT'])
+def activate():
+  garage_controller.remotely_activated = True
+  return flask.redirect(flask.url_for('/summary'), code=301)
 
 if __name__ == '__main__':
   garage_controller.setDaemon(True)
