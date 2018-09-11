@@ -143,7 +143,7 @@ payload = {'username': 'bob', 'email': 'bob@bob.com'}
 @app.route('/activate', methods=['PUT'])
 def activate():
   garage_controller.remotely_activated = True
-  return flask.redirect(flask.url_for('/summary'), code=301)
+  return flask.redirect(flask.url_for('summary'), code=301)
 
 if __name__ == '__main__':
   garage_controller.setDaemon(True)
