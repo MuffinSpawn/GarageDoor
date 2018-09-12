@@ -13,7 +13,7 @@ import flask
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 class GarageController(threading.Thread):
   DATA_SIZE = 7
@@ -81,7 +81,7 @@ class GarageController(threading.Thread):
 
     while self._running:
       try:
-        logger.debug('Connecting to CPX via I2C...')
+        logger.info('Connecting to CPX via I2C...')
         i2c = onionI2C.OnionI2C(0)
 
         while self._running:
@@ -116,10 +116,10 @@ class GarageController(threading.Thread):
           time.sleep(0.1)
 
       except Exception as e:
-        logger.error(e)
-        logger.info('Sleeping for 10 seconds before attempting to reconnect...')
+        logger.debug(e)
+        logger.debug('Sleeping for 10 seconds before attempting to reconnect...')
         time.sleep(10)
-        logger.info('Attempting to reconnect...')
+        logger.debug('Attempting to reconnect...')
 
 garage_controller = GarageController()
 app = flask.Flask(__name__)

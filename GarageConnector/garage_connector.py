@@ -10,7 +10,7 @@ from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 
 class GarageConnector(object):
@@ -83,7 +83,7 @@ class GarageConnector(object):
                         json.dumps(payload), 1)
       logger.debug('Published shadow update...')
     except Exception as e:
-      logger.error(e)
+      logger.debug(e)
 
   def stop(self):
     self.running = False
@@ -132,7 +132,7 @@ class GarageConnector(object):
             response = requests.get('http://localhost:5000/json/')
             data = response.json()
           except Exception as e:
-            logger.error(e)
+            logger.debug(e)
             time.sleep(5)
             continue
 
@@ -150,12 +150,12 @@ class GarageConnector(object):
           last_state = data['state']
           time.sleep(1)
       except Exception as e:
-        logger.error(e)
+        logger.debug(e)
         try:
           self._iot.disconnect()
         except:
           pass
-        logger.info('Sleeping for 10 seconds before attempting to reconnect to AWS...')
+        logger.debug('Sleeping for 10 seconds before attempting to reconnect to AWS...')
         time.sleep(10)
 
 if __name__ == '__main__':
