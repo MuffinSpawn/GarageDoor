@@ -132,8 +132,13 @@ class GarageConnector(object):
             logger.debug('Requesting activation...')
             requests.put('http://localhost:5000/activate/')
 
-          response = requests.get('http://localhost:5000/json/')
-          data = response.json()
+          try:
+            response = requests.get('http://localhost:5000/json/')
+            data = response.json()
+          except Exception as e:
+            logger.error(e)
+            time.sleep(5)
+            continue
 
           duration = time.time() - start_time
 
