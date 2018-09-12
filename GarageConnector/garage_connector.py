@@ -2,6 +2,7 @@
 
 import json
 import logging
+import requests
 import subprocess
 import os
 import time
@@ -61,15 +62,13 @@ class GarageConnector(object):
     self._do_update = True
 
   @classmethod
-  def getSignalStrengths():
+  def getSignalStrengths(cls):
     wifi_data_raw = subprocess.check_output(["/bin/ubus", "call", "onion", "wifi-scan", "{\'device\':\'ra0\'}"])
     wifi_data = json.loads(wifi_data_raw)
     signal_strengths = {}
     for record in wifi_data['results']:
       signal_strengths[record['ssid']] = record['signalStrength']
 
-    if state_changed:
-      self._iot.publish("$aws/things/GarageDoor/shadow/delete", "", 1)
     if not 'NETGEAR63' in signal_strengths:
       signal_strengths['NETGEAR63'] = 0
     if not 'Omega-11A3' in signal_strengths:
@@ -81,8 +80,11 @@ class GarageConnector(object):
       signal_strengths = GarageConnector.getSignalStrengths()
       logger.debug('Signal Strengths:\n{}'.format(signal_strengths))
 
+      if state_changed:
+        self._iot.publish("$aws/things/GarageDoor/shadow/delete", "", 1)
+
       payload = {"state": {"reported": {
-        "State": "{}".format(STATE_NAMES[state]),
+        "State": "{}".format(state),
         "StateUpdate": state_changed,
         "Temperature": temperature,
         "NETGEAR63": signal_strengths['NETGEAR63'],
@@ -131,10 +133,11 @@ class GarageConnector(object):
 
         self._logger.debug('Starting shadow connector main inner loop...')
         while not self.finished:
-          self._update(self._state, self._temperature, self._state_changed)
-          # REMOVE
-          self.finished = True
-          # REMOVE
+          # 1. Get data from GarageController
+          # 2. Every 10 minutes, update with state_changed=False
+          # 3. If new state != old state, update with state_changed=True
+
+          # self._update(self._state, self._temperature, self._state_changed)
           time.sleep(1)
       except Exception as e:
         logger.error(e)
