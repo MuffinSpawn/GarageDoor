@@ -1,0 +1,149 @@
+{
+	"results": [
+		{
+			"channel": "1",
+			"ssid": "ATT5I754H5",
+			"bssid": "e0:b7:0a:bf:45:20",
+			"cipher": "AES",
+			"encryptionString": "WPA2PSK",
+			"encryption": "psk2",
+			"signalStrength": "2",
+			"wirelessMode": "11b\/g\/n",
+			"ext-ch": "NONE",
+			"rssi": "-89"
+		},
+		{
+			"channel": "1",
+			"ssid": "HOME-82A2",
+			"bssid": "14:ab:f0:1f:82:a0",
+			"cipher": "TKIPAES",
+			"encryptionString": "WPA1PSKWPA2PSK",
+			"encryption": "psk2",
+			"signalStrength": "10",
+			"wirelessMode": "11b\/g\/n",
+			"ext-ch": "NONE",
+			"rssi": "-86"
+		},
+		{
+			"channel": "1",
+			"ssid": "",
+			"bssid": "12:ab:f0:1f:82:a0",
+			"cipher": "AES",
+			"encryptionString": "WPA2PSK",
+			"encryption": "psk2",
+			"signalStrength": "15",
+			"wirelessMode": "11b\/g\/n",
+			"ext-ch": "NONE",
+			"rssi": "-84"
+		},
+		{
+			"channel": "1",
+			"ssid": "TP-LINK_78A1",
+			"bssid": "f4:f2:6d:2d:78:a1",
+			"cipher": "AES",
+			"encryptionString": "WPA2PSK",
+			"encryption": "psk2",
+			"signalStrength": "10",
+			"wirelessMode": "11b\/g\/n",
+			"ext-ch": "NONE",
+			"rssi": "-86"
+		},
+		{
+			"channel": "1",
+			"ssid": "ATT9ek4eQ2",
+			"bssid": "dc:7f:a4:ae:30:1e",
+			"cipher": "AES",
+			"encryptionString": "WPA2PSK",
+			"encryption": "psk2",
+			"signalStrength": "0",
+			"wirelessMode": "11b\/g\/n",
+			"ext-ch": "NONE",
+			"rssi": "-90"
+		},
+		{
+			"channel": "4",
+			"ssid": "Omega-11A3",
+			"bssid": "42:a3:6b:c1:11:a4",
+			"cipher": "AES",
+			"encryptionString": "WPA2PSK",
+			"encryption": "psk2",
+			"signalStrength": "50",
+			"wirelessMode": "11b\/g\/n",
+			"ext-ch": "NONE",
+			"rssi": "-70"
+		},
+		{
+			"channel": "4",
+			"ssid": "NETGEAR63",
+			"bssid": "a0:63:91:af:75:bb",
+			"cipher": "AES",
+			"encryptionString": "WPA2PSK",
+			"encryption": "psk2",
+			"signalStrength": "0",
+			"wirelessMode": "11b\/g\/n",
+			"ext-ch": "NONE",
+			"rssi": "-90"
+		},
+		{
+			"channel": "4",
+			"ssid": "",
+			"bssid": "b8:a1:75:43:6d:15",
+			"cipher": "AES",
+			"encryptionString": "WPA2PSK",
+			"encryption": "psk2",
+			"signalStrength": "18",
+			"wirelessMode": "11b\/g\/n",
+			"ext-ch": "NONE",
+			"rssi": "-83"
+		},
+		{
+			"channel": "6",
+			"ssid": "MarioWiFi",
+			"bssid": "64:a5:c3:6b:8b:d4",
+			"cipher": "AES",
+			"encryptionString": "WPA2PSK",
+			"encryption": "psk2",
+			"signalStrength": "2",
+			"wirelessMode": "11b\/g\/n",
+			"ext-ch": "NONE",
+			"rssi": "-89"
+		},
+		{
+			"channel": "10",
+			"ssid": "CellSpot_2.4GHz_BC18",
+			"bssid": "ac:9e:17:a5:bc:18",
+			"cipher": "AES",
+			"encryptionString": "WPA2PSK",
+			"encryption": "psk2",
+			"signalStrength": "5",
+			"wirelessMode": "11b\/g\/n",
+			"ext-ch": "NONE",
+			"rssi": "-88"
+		},
+		{
+			"channel": "11",
+			"ssid": "SBG6782C2",
+			"bssid": "dc:45:17:de:7f:33",
+			"cipher": "AES",
+			"encryptionString": "WPA2PSK",
+			"encryption": "psk2",
+			"signalStrength": "13",
+			"wirelessMode": "11b\/g\/n",
+			"ext-ch": "NONE",
+			"rssi": "-85"
+		},
+		{
+			"channel": "11",
+			"ssid": "ATT7PAR8bk",
+			"bssid": "38:3b:c8:60:9f:ba",
+			"cipher": "TKIPAES",
+			"encryptionString": "WPA1PSKWPA2PSK",
+			"encryption": "psk2",
+			"signalStrength": "5",
+			"wirelessMode": "11b\/g\/n",
+			"ext-ch": "NONE",
+			"rssi": "-88"
+		}
+	]
+}
+

@@ -14,7 +14,6 @@ logger.setLevel(logging.DEBUG)
 
 class GarageConnector(object):
   def __init__(self):
-    threading.Thread.__init__(self)
     self._logger = logging.getLogger(self.__class__.__name__)
     self._logger.setLevel(logging.DEBUG)
     self._iot = None
@@ -61,21 +60,25 @@ class GarageConnector(object):
     self._state_changed = state_changed
     self._do_update = True
 
-  def update(self, state, temperature, state_changed=False):
+  @classmethod
+  def getSignalStrengths():
+    wifi_data_raw = subprocess.check_output(["/bin/ubus", "call", "onion", "wifi-scan", "{\'device\':\'ra0\'}"])
+    wifi_data = json.loads(wifi_data_raw)
+    signal_strengths = {}
+    for record in wifi_data['results']:
+      signal_strengths[record['ssid']] = record['signalStrength']
+
+    if state_changed:
+      self._iot.publish("$aws/things/GarageDoor/shadow/delete", "", 1)
+    if not 'NETGEAR63' in signal_strengths:
+      signal_strengths['NETGEAR63'] = 0
+    if not 'Omega-11A3' in signal_strengths:
+      signal_strengths['Omega-11A3'] = 0
+    return signal_strengths
+
+  def _update(self, state, temperature, state_changed=False):
     try:
-      wifi_data_raw = subprocess.check_output(["/bin/ubus", "call", "onion", "wifi-scan", "{\'device\':\'ra0\'}"])
-      wifi_data = json.loads(wifi_data_raw)
-      signal_strengths = {}
-      for record in wifi_data['results']:
-        signal_strengths[record['ssid']] = record['signalStrength']
-
-      if state_changed:
-        self._iot.publish("$aws/things/GarageDoor/shadow/delete", "", 1)
-      if not 'NETGEAR63' in signal_strengths:
-        signal_strengths['NETGEAR63'] = 0
-      if not 'Omega-11A3' in signal_strengths:
-        signal_strengths['Omega-11A3'] = 0
-
+      signal_strengths = GarageConnector.getSignalStrengths()
       logger.debug('Signal Strengths:\n{}'.format(signal_strengths))
 
       payload = {"state": {"reported": {
@@ -105,7 +108,7 @@ class GarageConnector(object):
 
     caPath = "/etc/awsiot/RootCA.pem"
     keyPath = "/etc/awsiot/911203a581-private.pem.key"
-    certPath = "/etc/awsiot/11203a581-certificate.pem.crt"
+    certPath = "/etc/awsiot/911203a581-certificate.pem.crt"
 
     self._iot = AWSIoTMQTTClient("GarageConnector")
     self._iot.configureEndpoint("a1qhgyhvs274m3.iot.us-east-2.amazonaws.com", 8883)
