@@ -22,10 +22,6 @@ class GarageConnector(object):
     self.finished = False
     self.status = ''
     self.remotely_activated = False
-    self._state = 'Unknown'
-    self._temperature = 0.0
-    self._state_changed = False
-    self._do_update = True
 
   def onlineCallback(self, client):
     logger.warn('Connected to AWS IoT')
@@ -39,7 +35,8 @@ class GarageConnector(object):
     topic = message.topic
     self._logger.info(topic)
     self._logger.info(message.payload)
-    if topic.endswith('delta'):
+    #if topic.endswith('delta'):
+    if topic.endswith('desired'):
       shadowData = json.loads(message.payload)
       #state = shadowData['state']['delta']['State']
       if 'State' in shadowData['state'].keys():
@@ -55,12 +52,6 @@ class GarageConnector(object):
     self._logger.debug('Request Status: {}'.format(self.status))
     self.finished = True
 
-  def update(self, state, temperature, state_changed=False):
-    self._state = state
-    self._temperature = temperature
-    self._state_changed = state_changed
-    self._do_update = True
-
   @classmethod
   def getSignalStrengths(cls):
     wifi_data_raw = subprocess.check_output(["/bin/ubus", "call", "onion", "wifi-scan", "{\'device\':\'ra0\'}"])
@@ -75,7 +66,7 @@ class GarageConnector(object):
       signal_strengths['Omega-11A3'] = 0
     return signal_strengths
 
-  def _update(self, state, temperature, state_changed=False):
+  def update(self, state, temperature, state_changed=False):
     try:
       signal_strengths = GarageConnector.getSignalStrengths()
       logger.debug('Signal Strengths:\n{}'.format(signal_strengths))
@@ -93,7 +84,6 @@ class GarageConnector(object):
       self._iot.publish("$aws/things/GarageDoor/shadow/update",
                         json.dumps(payload), 1)
       logger.debug('Published shadow update...')
-      self._do_update = False
     except Exception as e:
       logger.error(e)
 
@@ -116,6 +106,11 @@ class GarageConnector(object):
     self._iot.configureEndpoint("a1qhgyhvs274m3.iot.us-east-2.amazonaws.com", 8883)
     self._iot.configureCredentials(caPath, keyPath, certPath)
  
+    start_time = time.time()
+    state = ''
+    last_state = ''
+    data = None
+ 
     self._logger.debug('Starting shadow connector main outer loop...')
     while not self.finished:
       try:
@@ -133,11 +128,25 @@ class GarageConnector(object):
 
         self._logger.debug('Starting shadow connector main inner loop...')
         while not self.finished:
-          # 1. Get data from GarageController
-          # 2. Every 10 minutes, update with state_changed=False
-          # 3. If new state != old state, update with state_changed=True
+          if self.remotely_activated:
+            logger.debug('Requesting activation...')
+            requests.put('http://localhost:5000/activate/')
 
-          # self._update(self._state, self._temperature, self._state_changed)
+          response = requests.get('http://localhost:5000/json/')
+          data = response.json()
+
+          duration = time.time() - start_time
+
+          if last_state != data['state']:
+            logger.debug('State changed. Updating shadow...')
+            self.update(data['state'], data['temperature'], True)
+            start_time = time.time()
+          elif duration > 600:
+            logger.debug('Timer lapsed. Updating shadow...')
+            self.update(data['state'], data['temperature'])
+            start_time = time.time()
+
+          last_state = data['state']
           time.sleep(1)
       except Exception as e:
         logger.error(e)
