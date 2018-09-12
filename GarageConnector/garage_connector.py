@@ -19,7 +19,7 @@ class GarageConnector(object):
     self._logger.setLevel(logging.DEBUG)
     self._iot = None
     self._connected = False
-    self.finished = False
+    self.running = False
     self.status = ''
     self.remotely_activated = False
 
@@ -35,8 +35,7 @@ class GarageConnector(object):
     topic = message.topic
     self._logger.info(topic)
     self._logger.info(message.payload)
-    #if topic.endswith('delta'):
-    if topic.endswith('desired'):
+    if topic.endswith('delta'):
       shadowData = json.loads(message.payload)
       #state = shadowData['state']['delta']['State']
       if 'State' in shadowData['state'].keys():
@@ -50,7 +49,6 @@ class GarageConnector(object):
     else:
       self.status = 'invalid response: {}'.format(topic)
     self._logger.debug('Request Status: {}'.format(self.status))
-    self.finished = True
 
   @classmethod
   def getSignalStrengths(cls):
@@ -87,12 +85,8 @@ class GarageConnector(object):
     except Exception as e:
       logger.error(e)
 
-  def reset(self):
-    self.finished = False
-    self.remotely_activated = False
-
   def stop(self):
-    self.finished = True
+    self.running = False
 
   def run(self):
     aws_host = "a1qhgyhvs274m3.iot.us-east-2.amazonaws.com"
@@ -112,7 +106,8 @@ class GarageConnector(object):
     data = None
  
     self._logger.debug('Starting shadow connector main outer loop...')
-    while not self.finished:
+    self.running = True
+    while self.running:
       try:
         self._logger.info('Connecting to AWS...')
         self._iot.connect()
@@ -127,10 +122,11 @@ class GarageConnector(object):
         self._logger.info('Subscribed for Shadow Updates.')
 
         self._logger.debug('Starting shadow connector main inner loop...')
-        while not self.finished:
+        while self.running:
           if self.remotely_activated:
             logger.debug('Requesting activation...')
             requests.put('http://localhost:5000/activate/')
+            self.remotely_activated = False
 
           try:
             response = requests.get('http://localhost:5000/json/')
