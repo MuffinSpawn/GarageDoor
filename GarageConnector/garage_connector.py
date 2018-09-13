@@ -9,14 +9,12 @@ import time
 from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
 
 logging.basicConfig()
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 
 class GarageConnector(object):
   def __init__(self):
     self._logger = logging.getLogger(self.__class__.__name__)
-    self._logger.setLevel(logging.DEBUG)
+    self._logger.setLevel(logging.INFO)
     self._iot = None
     self._connected = False
     self.running = False
@@ -51,6 +49,27 @@ class GarageConnector(object):
     self._logger.debug('Request Status: {}'.format(self.status))
 
   @classmethod
+  def getSideDoorState(cls):
+    status_params = {'command':'status', 'params':{'gpio':'0'}}
+    gpio_data_raw = subprocess.check_output(
+      ["/bin/ubus", "call", "onion", "gpio", json.dumps(status_params)])
+    gpio_data = json.loads(gpio_data_raw)
+    if gpio_data['direction'] != 'input':
+      set_dir_params = {'command':'set-direction',
+                        'params':{'gpio':'0', 'value':'input'}}
+      subprocess.call(
+        ["/bin/ubus", "call", "onion", "gpio", json.dumps(set_dir_params)])
+      get_params = {'command':'get', 'params':{'gpio':'0'}}
+      gpio_data_raw = subprocess.check_output(
+        ["/bin/ubus", "call", "onion", "gpio", json.dumps(get_params)])
+      gpio_data = json.loads(gpio_data_raw)
+
+    state = 'Closed'
+    if gpio_data['value'] == 1:
+      state = 'Open'
+    return state
+
+  @classmethod
   def getSignalStrengths(cls):
     wifi_data_raw = subprocess.check_output(["/bin/ubus", "call", "onion", "wifi-scan", "{\'device\':\'ra0\'}"])
     wifi_data = json.loads(wifi_data_raw)
@@ -67,7 +86,10 @@ class GarageConnector(object):
   def update(self, state, temperature, state_changed=False):
     try:
       signal_strengths = GarageConnector.getSignalStrengths()
-      logger.debug('Signal Strengths:\n{}'.format(signal_strengths))
+      self._logger.debug('Signal Strengths:\n{}'.format(signal_strengths))
+
+      side_door_state = GarageConnector.getSideDoorState()
+      self._logger.debug('Side Door State: {}'.format(side_door_state))
 
       if state_changed:
         self._iot.publish("$aws/things/GarageDoor/shadow/delete", "", 1)
@@ -76,14 +98,15 @@ class GarageConnector(object):
         "State": "{}".format(state),
         "StateUpdate": state_changed,
         "Temperature": temperature,
+        "SideDoorState": side_door_state,
         "NETGEAR63": signal_strengths['NETGEAR63'],
         "Omega-11A3": signal_strengths['Omega-11A3']}}}
-      logger.debug('Publishing shadow update...')
+      self._logger.debug('Publishing shadow update...')
       self._iot.publish("$aws/things/GarageDoor/shadow/update",
                         json.dumps(payload), 1)
-      logger.debug('Published shadow update...')
+      self._logger.debug('Published shadow update...')
     except Exception as e:
-      logger.debug(e)
+      self._logger.debug(e)
 
   def stop(self):
     self.running = False
@@ -124,13 +147,14 @@ class GarageConnector(object):
         self._logger.debug('Starting shadow connector main inner loop...')
         while self.running:
           if self.remotely_activated:
-            logger.debug('Requesting activation...')
+            self._logger.debug('Requesting activation...')
             requests.put('http://localhost:5000/activate/')
             self.remotely_activated = False
 
           try:
             response = requests.get('http://localhost:5000/json/')
             data = response.json()
+            self._logger.debug('Controller Data: {}'.format(data))
           except Exception as e:
             logger.debug(e)
             time.sleep(5)
@@ -139,25 +163,27 @@ class GarageConnector(object):
           duration = time.time() - start_time
 
           if last_state != data['state']:
-            logger.debug('State changed. Updating shadow...')
+            self._logger.debug('State changed. Updating shadow...')
             self.update(data['state'], data['temperature'], True)
             start_time = time.time()
           elif duration > 600:
-            logger.debug('Timer lapsed. Updating shadow...')
+            self._logger.debug('Timer lapsed. Updating shadow...')
             self.update(data['state'], data['temperature'])
             start_time = time.time()
 
           last_state = data['state']
           time.sleep(1)
       except Exception as e:
-        logger.debug(e)
+        self._logger.debug(e)
         try:
           self._iot.disconnect()
         except:
           pass
-        logger.debug('Sleeping for 10 seconds before attempting to reconnect to AWS...')
+        self._logger.debug('Sleeping for 10 seconds before attempting to reconnect to AWS...')
         time.sleep(10)
 
 if __name__ == '__main__':
+  logger = logging.getLogger(__name__)
+  logger.setLevel(logging.INFO)
   garage_connector = GarageConnector()
   garage_connector.run()
