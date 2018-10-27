@@ -48,8 +48,7 @@ class GarageConnector(object):
       self.status = 'invalid response: {}'.format(topic)
     self._logger.debug('Request Status: {}'.format(self.status))
 
-  @classmethod
-  def getSideDoorState(cls):
+  def getSideDoorState(self):
     status_params = {'command':'status', 'params':{'gpio':'0'}}
     gpio_data_raw = subprocess.check_output(
       ["/bin/ubus", "call", "onion", "gpio", json.dumps(status_params)])
@@ -63,9 +62,10 @@ class GarageConnector(object):
       gpio_data_raw = subprocess.check_output(
         ["/bin/ubus", "call", "onion", "gpio", json.dumps(get_params)])
       gpio_data = json.loads(gpio_data_raw)
+    self._logger.debug('GPIO Data: {}'.format(gpio_data))
 
     state = 'Closed'
-    if gpio_data['value'] == 1:
+    if gpio_data['value'] == '1':
       state = 'Open'
     return state
 
@@ -83,22 +83,19 @@ class GarageConnector(object):
       signal_strengths['Omega-11A3'] = 0
     return signal_strengths
 
-  def update(self, state, temperature, state_changed=False):
+  def update(self, state, state_changed=False):
     try:
       signal_strengths = GarageConnector.getSignalStrengths()
       self._logger.debug('Signal Strengths:\n{}'.format(signal_strengths))
-
-      side_door_state = GarageConnector.getSideDoorState()
-      self._logger.debug('Side Door State: {}'.format(side_door_state))
 
       if state_changed:
         self._iot.publish("$aws/things/GarageDoor/shadow/delete", "", 1)
 
       payload = {"state": {"reported": {
-        "State": "{}".format(state),
+        "State": "{}".format(state['main']),
         "StateUpdate": state_changed,
-        "Temperature": temperature,
-        "SideDoorState": side_door_state,
+        "Temperature": state['temperature'],
+        "SideDoorState": state['side'],
         "NETGEAR63": signal_strengths['NETGEAR63'],
         "Omega-11A3": signal_strengths['Omega-11A3']}}}
       self._logger.debug('Publishing shadow update...')
@@ -125,7 +122,8 @@ class GarageConnector(object):
  
     start_time = time.time()
     state = ''
-    last_state = ''
+    last_main_door_state = ''
+    last_side_door_state = ''
     data = None
  
     self._logger.debug('Starting shadow connector main outer loop...')
@@ -160,18 +158,29 @@ class GarageConnector(object):
             time.sleep(5)
             continue
 
+          side_door_state = self.getSideDoorState()
+          self._logger.debug('Side Door State: {}'.format(side_door_state))
+
+          full_state = {
+            "main": data['state'],
+            "temperature": data['temperature'],
+            "side": side_door_state
+          }
+
           duration = time.time() - start_time
 
-          if last_state != data['state']:
+          if last_main_door_state != data['state'] or\
+             last_side_door_state != side_door_state:
             self._logger.debug('State changed. Updating shadow...')
-            self.update(data['state'], data['temperature'], True)
+            self.update(full_state, True)
             start_time = time.time()
           elif duration > 600:
             self._logger.debug('Timer lapsed. Updating shadow...')
-            self.update(data['state'], data['temperature'])
+            self.update(full_state)
             start_time = time.time()
 
-          last_state = data['state']
+          last_main_door_state = data['state']
+          last_side_door_state = side_door_state
           time.sleep(1)
       except Exception as e:
         self._logger.debug(e)
