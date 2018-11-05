@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import datetime
+from enum import Enum
 import json
 import logging
 import requests
@@ -14,7 +15,24 @@ from sendgrid.helpers import mail
 
 logging.basicConfig(format='%(asctime)-15s %(message)s')
 
+class GarageState(Enum):
+  UNKNOWN = 0
+  CLOSED = 1
+  OPEN = 2
+  EXTENDED_OPEN = 3
+
+class GarageEvent(Enum):
+  ANY_OPENED = 0
+  ALL_CLOSED = 1
+  PERIODIC_UPDATE = 2
+
 class GarageMonitor(object):
+  # Events: any opened, all closed, periodic update, 
+  transition_table = [[GarageState.OPEN, GarageState.CLOSED, GarageState.UNKNOWN],
+                      [GarageState.OPEN, GarageState.CLOSED, GarageState.CLOSED],
+                      [GarageState.OPEN, GarageState.CLOSED, GarageState.EXTENDED_OPEN],
+                      [GarageState.EXTENDED_OPEN, GarageState.CLOSED, GarageState.EXTENDED_OPEN]]
+
   def __init__(self):
     self._logger = logging.getLogger(self.__class__.__name__)
     self._logger.setLevel(logging.DEBUG)
@@ -22,7 +40,10 @@ class GarageMonitor(object):
     self._iot = None
     self.shadow = None
     self.running = False
-    self.ready = False
+    self.state = GarageState.UNKNOWN
+
+  def handleEvent(self, event):
+    self.state = transition_table[self.state.value][event.value]
 
   def onlineCallback(self, client):
     logger.warn('Connected to AWS IoT')
@@ -35,8 +56,13 @@ class GarageMonitor(object):
   def getCallback(self, client, userdata, message):
     topic = message.topic
     if topic.endswith('accepted'):
-      self.ready = True
       self.shadow = json.loads(message.payload)
+      if shadow['state']['reported']['State'] == 'Closed' and
+         shadow['state']['reported']['SideDoorState'] == 'Closed':
+        self.state = GarageState.CLOSED
+      else:
+        self.state = GarageState.OPEN
+        
       self._logger.debug('Fetched Shadow:\n{}'.format(self.shadow))
       self.sendEmail(init=True)
       '''
@@ -115,12 +141,12 @@ class GarageMonitor(object):
     self._iot = AWSIoTMQTTClient(self._config['clientid'])
     self._iot.configureEndpoint(aws_host, aws_port)
     self._iot.configureCredentials(caPath, keyPath, certPath)
- 
+
     start_time = time.time()
     state = ''
     last_state = ''
     data = None
- 
+
     self._logger.debug('Starting shadow monitor main outer loop...')
 
     self._logger.info('Connecting to AWS...')
@@ -162,7 +188,7 @@ def main():
     logger.debug('Before connect')
     garage_monitor.connect()
     logger.debug('After connect')
-    while(not garage_monitor.ready):
+    while(garage_monitor.state == GarageState.UNKNOWN):
       time.sleep(1)
 
   #app.secret_key = 'super_secret_key'

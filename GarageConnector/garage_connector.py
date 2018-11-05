@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from datetime import datetime
 import json
 import logging
 import requests
@@ -97,7 +98,8 @@ class GarageConnector(object):
         "Temperature": state['temperature'],
         "SideDoorState": state['side'],
         "NETGEAR63": signal_strengths['NETGEAR63'],
-        "Omega-11A3": signal_strengths['Omega-11A3']}}}
+        "Omega-11A3": signal_strengths['Omega-11A3'],
+        "Timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}}}
       self._logger.debug('Publishing shadow update...')
       self._iot.publish("$aws/things/GarageDoor/shadow/update",
                         json.dumps(payload), 1)
