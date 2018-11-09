@@ -28,43 +28,52 @@ class GarageEvent(Enum):
 
 class GarageMonitor(object):
   # Events: any opened, all closed, periodic update, 
-  transition_table = [[GarageState.OPEN, GarageState.CLOSED, GarageState.UNKNOWN],
-                      [GarageState.OPEN, GarageState.CLOSED, GarageState.CLOSED],
-                      [GarageState.OPEN, GarageState.CLOSED, GarageState.EXTENDED_OPEN],
+  transition_table = [[GarageState.OPEN,          GarageState.CLOSED, GarageState.UNKNOWN],
+                      [GarageState.OPEN,          GarageState.CLOSED, GarageState.CLOSED],
+                      [GarageState.OPEN,          GarageState.CLOSED, GarageState.EXTENDED_OPEN],
                       [GarageState.EXTENDED_OPEN, GarageState.CLOSED, GarageState.EXTENDED_OPEN]]
+  timeout_duration = 600
 
   def __init__(self):
     self._logger = logging.getLogger(self.__class__.__name__)
     self._logger.setLevel(logging.DEBUG)
     self._config = None
     self._iot = None
+    self._opened_time = None
     self.shadow = None
     self.running = False
     self.state = GarageState.UNKNOWN
 
   def handleEvent(self, event):
-    self.state = transition_table[self.state.value][event.value]
+    last_state = self.state
+    self.state = self.transition_table[self.state.value][event.value]
+    if last_state != self.state:
+      self.sendEmail()
 
   def onlineCallback(self, client):
-    logger.warn('Connected to AWS IoT')
+    self._logger.warn('Connected to AWS IoT')
     self._connected = True
 
   def offlineCallback(self, client):
-    logger.warn('NOT Connected to AWS IoT')
+    self._logger.warn('NOT Connected to AWS IoT')
     self._connected = False
 
   def getCallback(self, client, userdata, message):
     topic = message.topic
     if topic.endswith('accepted'):
       self.shadow = json.loads(message.payload)
-      if shadow['state']['reported']['State'] == 'Closed' and
-         shadow['state']['reported']['SideDoorState'] == 'Closed':
-        self.state = GarageState.CLOSED
-      else:
-        self.state = GarageState.OPEN
-        
       self._logger.debug('Fetched Shadow:\n{}'.format(self.shadow))
-      self.sendEmail(init=True)
+
+      mainState = self.shadow['state']['reported']['State']
+      sideState = self.shadow['state']['reported']['SideDoorState']
+      event = None
+      if mainState == 'Closed' and sideState == 'Closed':
+        event = GarageEvent.ALL_CLOSED
+      else:
+        event = GarageEvent.ANY_OPENED
+
+      self.handleEvent(event)
+
       '''
         shadow['state']['reported']['State'],
         shadow['state']['reported']['SideDoorState'],
@@ -84,8 +93,21 @@ class GarageMonitor(object):
     if topic.endswith('accepted'):
       self._logger.debug('A shadow update was accepted.')
       self.shadow = json.loads(message.payload)
-      if self.shadow['state']['reported']['StateUpdate']:
-        self.sendEmail()
+      self._logger.debug('Fetched Shadow:\n{}'.format(self.shadow))
+
+      mainState = self.shadow['state']['reported']['State']
+      sideState = self.shadow['state']['reported']['SideDoorState']
+      stateUpdate = self.shadow['state']['reported']['StateUpdate']
+      event = None
+      if stateUpdate:
+        if mainState == 'Closed' and sideState == 'Closed':
+          event = GarageEvent.ALL_CLOSED
+        else:
+          event = GarageEvent.ANY_OPENED
+      else:
+        event = GarageEvent.PERIODIC_UPDATE
+
+      self.handleEvent(event)
     elif topic.endswith('rejected'):
       self._logger.debug('A shadow update was rejected.')
     else:
@@ -126,7 +148,7 @@ class GarageMonitor(object):
         }
       ]
     }
-    response = sg.client.mail.send.post(request_body=data)
+    sg.client.mail.send.post(request_body=data)
 
   def connect(self):
     with open('/etc/awsiot/config.json') as config_file:
