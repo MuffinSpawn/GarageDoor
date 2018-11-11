@@ -8,7 +8,7 @@ import os
 import time
 from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
 
-logging.basicConfig()
+logging.basicConfig(format='%(asctime)-15s %(message)s')
 
 
 class GarageConnector(object):

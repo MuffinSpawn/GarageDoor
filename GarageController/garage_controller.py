@@ -11,7 +11,7 @@ from OmegaExpansion import onionI2C
 
 import flask
 
-logging.basicConfig()
+logging.basicConfig(format='%(asctime)-15s %(message)s')
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
