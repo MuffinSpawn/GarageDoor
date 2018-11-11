@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}"/>
+</head>
+<body>
+	<h1>Garage Door Status</h1>
+  <p>Main Door State: {{ shadow['state']['reported']['State'] }}</p>
+  <p>Side Door State: {{shadow['state']['reported']['SideDoorState']}}</p>
+  <p>Temperature: {{shadow['state']['reported']['Temperature']}} &deg;C</p>
+</body>
+</html>
