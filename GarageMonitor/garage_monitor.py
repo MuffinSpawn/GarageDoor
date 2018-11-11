@@ -4,10 +4,12 @@ import datetime
 from enum import Enum
 import json
 import logging
+import os
 import requests
 import subprocess
-import os
+import threading
 import time
+
 import flask
 from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
 import sendgrid
@@ -25,13 +27,15 @@ class GarageEvent(Enum):
   ANY_OPENED = 0
   ALL_CLOSED = 1
   PERIODIC_UPDATE = 2
+  INIT_OPEN = 3
+  INIT_CLOSED = 4
 
 class GarageMonitor(object):
   # Events: any opened, all closed, periodic update, 
-  transition_table = [[GarageState.OPEN,          GarageState.CLOSED, GarageState.UNKNOWN],
-                      [GarageState.OPEN,          GarageState.CLOSED, GarageState.CLOSED],
-                      [GarageState.OPEN,          GarageState.CLOSED, GarageState.EXTENDED_OPEN],
-                      [GarageState.EXTENDED_OPEN, GarageState.CLOSED, GarageState.EXTENDED_OPEN]]
+  transition_table = [[GarageState.OPEN,          GarageState.CLOSED, GarageState.UNKNOWN, GarageState.OPEN, GarageState.CLOSED],
+                      [GarageState.OPEN,          GarageState.CLOSED, GarageState.CLOSED, GarageState.UNKNOWN, GarageState.UNKNOWN],
+                      [GarageState.OPEN,          GarageState.CLOSED, GarageState.EXTENDED_OPEN, GarageState.UNKNOWN, GarageState.UNKNOWN],
+                      [GarageState.EXTENDED_OPEN, GarageState.CLOSED, GarageState.EXTENDED_OPEN, GarageState.UNKNOWN, GarageState.UNKNOWN]]
   timeout_duration = 600
 
   def __init__(self):
@@ -45,10 +49,12 @@ class GarageMonitor(object):
     self.state = GarageState.UNKNOWN
 
   def handleEvent(self, event):
+    self._logger.info('Event: {}'.format(event))
     last_state = self.state
     self.state = self.transition_table[self.state.value][event.value]
+    self._logger.info('Last State: {}\tCurrent State: {}'.format(last_state, self.state))
     if last_state != self.state:
-      self.sendEmail()
+      self.sendEmail(init=(event.value >= GarageEvent.INIT_OPEN.value))
 
   def onlineCallback(self, client):
     self._logger.warn('Connected to AWS IoT')
@@ -60,6 +66,7 @@ class GarageMonitor(object):
 
   def getCallback(self, client, userdata, message):
     topic = message.topic
+    self._logger.debug(topic)
     if topic.endswith('accepted'):
       self.shadow = json.loads(message.payload)
       self._logger.debug('Fetched Shadow:\n{}'.format(self.shadow))
@@ -68,9 +75,9 @@ class GarageMonitor(object):
       sideState = self.shadow['state']['reported']['SideDoorState']
       event = None
       if mainState == 'Closed' and sideState == 'Closed':
-        event = GarageEvent.ALL_CLOSED
+        event = GarageEvent.INIT_CLOSED
       else:
-        event = GarageEvent.ANY_OPENED
+        event = GarageEvent.INIT_OPEN
 
       self.handleEvent(event)
 
@@ -88,12 +95,10 @@ class GarageMonitor(object):
 
   def updateCallback(self, client, userdata, message):
     topic = message.topic
-    self._logger.info(topic)
-    self._logger.info(message.payload)
+    self._logger.debug(topic)
     if topic.endswith('accepted'):
-      self._logger.debug('A shadow update was accepted.')
       self.shadow = json.loads(message.payload)
-      self._logger.debug('Fetched Shadow:\n{}'.format(self.shadow))
+      self._logger.info('A shadow update was accepted:\n{}'.format(self.shadow))
 
       mainState = self.shadow['state']['reported']['State']
       sideState = self.shadow['state']['reported']['SideDoorState']
@@ -105,7 +110,16 @@ class GarageMonitor(object):
         else:
           event = GarageEvent.ANY_OPENED
       else:
-        event = GarageEvent.PERIODIC_UPDATE
+        if mainState == 'Closed' and sideState == 'Closed':
+          if self.state != GarageState.CLOSED:
+            event = GarageEvent.ALL_CLOSED
+          else:
+            event = GarageEvent.PERIODIC_UPDATE
+        else:
+          if self.state != GarageState.OPEN:
+            event = GarageEvent.ANY_OPENED
+          else:
+            event = GarageEvent.PERIODIC_UPDATE
 
       self.handleEvent(event)
     elif topic.endswith('rejected'):
@@ -114,6 +128,7 @@ class GarageMonitor(object):
       self._logger.warn('Received an unhandled update for topic {}.'.format(topic))
 
   def sendEmail(self, init=False):
+    self._logger.info('Sending email update...')
     intro = 'The garage door changed state'
     if init:
       intro = 'The garage door monitor was started'
@@ -204,18 +219,17 @@ def displayStatus():
     return flask.render_template('status.html', shadow=garage_monitor.shadow)
 
 def main():
-  if not garage_monitor.running:
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.DEBUG)
-    logger.debug('Before connect')
-    garage_monitor.connect()
-    logger.debug('After connect')
-    while(garage_monitor.state == GarageState.UNKNOWN):
-      time.sleep(1)
+  logger = logging.getLogger(__name__)
+  logger.setLevel(logging.DEBUG)
+  logger.debug('Before connect ({})'.format(threading.current_thread()))
+  garage_monitor.connect()
+  logger.debug('After connect')
+  while(garage_monitor.state == GarageState.UNKNOWN):
+    time.sleep(1)
 
   #app.secret_key = 'super_secret_key'
   app.debug = True
-  app.run(host = '0.0.0.0', port = 5000)
+  app.run(host = '0.0.0.0', port = 5000, use_reloader=False)
 
 if __name__ == '__main__':
   main()
