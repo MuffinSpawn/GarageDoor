@@ -99,7 +99,7 @@ class GarageConnector(object):
         "SideDoorState": state['side'],
         "NETGEAR63": signal_strengths['NETGEAR63'],
         "Omega-11A3": signal_strengths['Omega-11A3'],
-        "Timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}}}
+        "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}}}
       self._logger.debug('Publishing shadow update...')
       self._iot.publish("$aws/things/GarageDoor/shadow/update",
                         json.dumps(payload), 1)
