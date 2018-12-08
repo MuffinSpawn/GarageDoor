@@ -11,6 +11,7 @@ import threading
 import time
 
 import flask
+from http.client import RemoteDisconnected
 from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
 import sendgrid
 from sendgrid.helpers import mail
@@ -47,6 +48,7 @@ class GarageMonitor(object):
     self.shadow = None
     self.running = False
     self.state = GarageState.UNKNOWN
+    self._message_index = 0
 
   def handleEvent(self, event):
     self._logger.info('Event: {}'.format(event))
@@ -67,9 +69,12 @@ class GarageMonitor(object):
   def getCallback(self, client, userdata, message):
     topic = message.topic
     self._logger.debug(topic)
+    self._logger.debug('Message: {}'.format(dir(message)))
     if topic.endswith('accepted'):
       self.shadow = json.loads(message.payload)
       self._logger.debug('Fetched Shadow:\n{}'.format(self.shadow))
+
+      self._message_index = self.shadow['version']
 
       mainState = self.shadow['state']['reported']['State']
       sideState = self.shadow['state']['reported']['SideDoorState']
@@ -100,6 +105,10 @@ class GarageMonitor(object):
       self.shadow = json.loads(message.payload)
       self._logger.info('A shadow update was accepted:\n{}'.format(self.shadow))
 
+      if self.shadow['version'] <= self._message_index:
+        self._logger.info('Skipping repeat message with index {}'.format(self._message_index))
+        return
+
       mainState = self.shadow['state']['reported']['State']
       sideState = self.shadow['state']['reported']['SideDoorState']
       stateUpdate = self.shadow['state']['reported']['StateUpdate']
@@ -126,6 +135,7 @@ class GarageMonitor(object):
       self._logger.debug('A shadow update was rejected.')
     else:
       self._logger.warn('Received an unhandled update for topic {}.'.format(topic))
+    self._message_index = self.shadow['version']
 
   def sendEmail(self, init=False):
     self._logger.info('Sending email update...')
@@ -156,14 +166,20 @@ class GarageMonitor(object):
                    Main Door State: {}
                    Side Door State: {}
                    Temperature:     {} *C
+                   Message Index:   {}
                    '''.format(intro, published_at,
                               self.shadow['state']['reported']['State'],
                               self.shadow['state']['reported']['SideDoorState'],
-                              self.shadow['state']['reported']['Temperature'])
+                              self.shadow['state']['reported']['Temperature'],
+                              self._message_index)
         }
       ]
     }
-    sg.client.mail.send.post(request_body=data)
+    try:
+      sg.client.mail.send.post(request_body=data)
+    except RemoteDisconnected as rd:
+      self._logger.error('Failed to send status email:\n{}'.format(rd))
+
 
   def connect(self):
     with open('/etc/awsiot/config.json') as config_file:
