@@ -11,7 +11,7 @@ from OmegaExpansion import onionI2C
 
 import flask
 
-logging.basicConfig()
+logging.basicConfig(format='%(asctime)-15s %(message)s')
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -145,4 +145,4 @@ if __name__ == '__main__':
   garage_controller.setDaemon(True)
   garage_controller.start()
   app.debug = True
-  app.run(host = '0.0.0.0', port = 5000)
+  app.run(host = '0.0.0.0', port = 5000, use_reloader=False)

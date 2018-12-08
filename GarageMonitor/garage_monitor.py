@@ -5,14 +5,14 @@ from enum import Enum
 import json
 import logging
 import os
-import requests
 import subprocess
 import threading
 import time
 
+from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
 import flask
 from http.client import RemoteDisconnected
-from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
+import requests
 import sendgrid
 from sendgrid.helpers import mail
 
