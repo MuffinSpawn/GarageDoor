@@ -5,6 +5,7 @@ from enum import Enum
 import json
 import logging
 import os
+import re
 import subprocess
 import threading
 import time
@@ -19,11 +20,18 @@ from sendgrid.helpers import mail
 
 logging.basicConfig(format='%(asctime)-15s %(message)s')
 
+state_re = re.compile('<GarageState\.([A-Z][A-Z]*):..*')
+type_re = re.compile('<GarageEventType\.([A-Z][A-Z]*_[A-Z][A-Z]*):..*')
+
 class GarageState(Enum):
   UNKNOWN = 0
   CLOSED = 1
   OPEN = 2
   EXTENDED_OPEN = 3
+
+  def __str__(self):
+    default_string = super.__str__(self)
+    return state_re.match(default_string).group(1)
 
 class GarageEventType(Enum):
   ANY_OPENED = 0
@@ -31,6 +39,10 @@ class GarageEventType(Enum):
   PERIODIC_UPDATE = 2
   INIT_OPEN = 3
   INIT_CLOSED = 4
+
+  def __str__(self):
+    default_string = super.__str__(self)
+    return type_re.match(default_string).group(1)
 
 class GarageEvent():
   def __init__(self, event_type, shadow):
@@ -53,6 +65,7 @@ class GarageMonitor(object):
     self._opened_time = None
     self.running = False
     self.state = GarageState.UNKNOWN
+    self.history = []
     self._message_index = 0
 
   def handleEvent(self, event, shadow):
@@ -61,8 +74,11 @@ class GarageMonitor(object):
     last_state = self.state
     self.state = self.transition_table[self.state.value][event.type.value]
     self._logger.info('Last State: {}\tCurrent State: {}'.format(last_state, self.state))
+    self.history.append(shadow)
     if last_state != self.state or self.state == GarageState.EXTENDED_OPEN:
       self.sendEmail(shadow, init=(event.type.value >= GarageEventType.INIT_OPEN.value))
+    if self.state == GarageState.CLOSED:
+      self.history = []
 
   def onlineCallback(self, client):
     self._logger.warn('Connected to AWS IoT')
@@ -146,6 +162,23 @@ class GarageMonitor(object):
     if init:
       intro = 'The garage door monitor was started'
     published_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    message = '''
+      {} at {}:
+      Main Door State: {}
+      Side Door State: {}
+      Temperature:     {} *C
+      Message Index:   {}
+      History:'''.format(intro, published_at,
+                shadow['state']['reported']['State'],
+                shadow['state']['reported']['SideDoorState'],
+                shadow['state']['reported']['Temperature'],
+                shadow['version'])
+    for datum in self.history:
+      message += '\n      {} {} {}'.format(
+        datum['state']['reported']['State'],
+        datum['state']['reported']['SideDoorState'],
+        datum['state']['reported']['Timestamp'])
+    self._logger.info('Message:{}'.format(message))
     sg = sendgrid.SendGridAPIClient(apikey=self._config['sgkey'])
     data = {
       "personalizations": [
@@ -164,17 +197,7 @@ class GarageMonitor(object):
       "content": [
         {
           "type": "text/plain",
-          "value": '''
-                   {} at {}:
-                   Main Door State: {}
-                   Side Door State: {}
-                   Temperature:     {} *C
-                   Message Index:   {}
-                   '''.format(intro, published_at,
-                              shadow['state']['reported']['State'],
-                              shadow['state']['reported']['SideDoorState'],
-                              shadow['state']['reported']['Temperature'],
-                              shadow['version'])
+          "value": message
         }
       ]
     }
