@@ -20,7 +20,7 @@ from sendgrid.helpers import mail
 
 logging.basicConfig(format='%(asctime)-15s %(message)s')
 
-state_re = re.compile('<GarageState\.([A-Z][A-Z]*):..*')
+state_re = re.compile('<GarageState\.([A-Z][A-Z_]*):..*')
 type_re = re.compile('<GarageEventType\.([A-Z][A-Z]*_[A-Z][A-Z]*):..*')
 
 class GarageState(Enum):
