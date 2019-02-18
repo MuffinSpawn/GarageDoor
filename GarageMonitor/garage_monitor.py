@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-import datetime
+from datetime import datetime
+from dateutil import tz
 from enum import Enum
 import json
 import logging
@@ -161,7 +162,7 @@ class GarageMonitor(object):
     intro = 'The garage door changed state'
     if init:
       intro = 'The garage door monitor was started'
-    published_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    published_at = datetime.now(tz=tz.tzlocal()).strftime("%Y-%m-%d %H:%M:%S %Z")
     message = '''
       {} at {}:
       Main Door State: {}
@@ -174,10 +175,15 @@ class GarageMonitor(object):
                 shadow['state']['reported']['Temperature'],
                 shadow['version'])
     for datum in self.history:
+      gmt_timestamp = datetime.strptime(
+        datum['state']['reported']['Timestamp'],
+        '%Y-%m-%d %H:%M:%S').replace(
+          tzinfo=tz.tzutc())
+      local_timestamp = gmt_timestamp.astimezone(tz.tzlocal())
       message += '\n      {} {} {}'.format(
         datum['state']['reported']['State'],
         datum['state']['reported']['SideDoorState'],
-        datum['state']['reported']['Timestamp'])
+        local_timestamp.strftime("%Y-%m-%d %H:%M:%S %Z"))
     self._logger.info('Message:{}'.format(message))
     sg = sendgrid.SendGridAPIClient(apikey=self._config['sgkey'])
     data = {
