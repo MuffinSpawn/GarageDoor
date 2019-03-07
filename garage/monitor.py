@@ -1,7 +1,11 @@
-import datetime
+from datetime import datetime
+from dateutil import tz
 from enum import Enum
 import json
 import logging
+import os
+import re
+import subprocess
 import threading
 import time
 
@@ -12,18 +16,34 @@ from sendgrid.helpers import mail
 
 logging.basicConfig(format='%(asctime)-15s %(message)s')
 
+state_re = re.compile('<GarageState\.([A-Z][A-Z_]*):..*')
+type_re = re.compile('<GarageEventType\.([A-Z][A-Z]*_[A-Z][A-Z]*):..*')
+
 class GarageState(Enum):
   UNKNOWN = 0
   CLOSED = 1
   OPEN = 2
   EXTENDED_OPEN = 3
 
-class GarageEvent(Enum):
+  def __str__(self):
+    default_string = super.__str__(self)
+    return state_re.match(default_string).group(1)
+
+class GarageEventType(Enum):
   ANY_OPENED = 0
   ALL_CLOSED = 1
   PERIODIC_UPDATE = 2
   INIT_OPEN = 3
   INIT_CLOSED = 4
+
+  def __str__(self):
+    default_string = super.__str__(self)
+    return type_re.match(default_string).group(1)
+
+class GarageEvent():
+  def __init__(self, event_type, shadow):
+    self.type = event_type
+    self.shadow = shadow
 
 class GarageMonitor(object):
   # Events: any opened, all closed, periodic update, 
@@ -39,17 +59,22 @@ class GarageMonitor(object):
     self._config = None
     self._iot = None
     self._opened_time = None
-    self.shadow = None
     self.running = False
     self.state = GarageState.UNKNOWN
+    self.history = []
+    self._message_index = 0
 
-  def handleEvent(self, event):
-    self._logger.info('Event: {}'.format(event))
+  def handleEvent(self, event, shadow):
+    self._message_index = shadow['version']
+    self._logger.info('Event: {}'.format(event.type))
     last_state = self.state
-    self.state = self.transition_table[self.state.value][event.value]
+    self.state = self.transition_table[self.state.value][event.type.value]
     self._logger.info('Last State: {}\tCurrent State: {}'.format(last_state, self.state))
-    if last_state != self.state:
-      self.sendEmail(init=(event.value >= GarageEvent.INIT_OPEN.value))
+    self.history.append(shadow)
+    if last_state != self.state or self.state == GarageState.EXTENDED_OPEN:
+      self.sendEmail(shadow, init=(event.type.value >= GarageEventType.INIT_OPEN.value))
+    if self.state == GarageState.CLOSED:
+      self.history = []
 
   def onlineCallback(self, client):
     self._logger.warn('Connected to AWS IoT')
@@ -62,19 +87,20 @@ class GarageMonitor(object):
   def getCallback(self, client, userdata, message):
     topic = message.topic
     self._logger.debug(topic)
+    self._logger.debug('Message: {}'.format(dir(message)))
     if topic.endswith('accepted'):
-      self.shadow = json.loads(message.payload)
-      self._logger.debug('Fetched Shadow:\n{}'.format(self.shadow))
+      shadow = json.loads(message.payload)
+      self._logger.debug('Fetched Shadow:\n{}'.format(shadow))
 
-      mainState = self.shadow['state']['reported']['State']
-      sideState = self.shadow['state']['reported']['SideDoorState']
+      mainState = shadow['state']['reported']['State']
+      sideState = shadow['state']['reported']['SideDoorState']
       event = None
       if mainState == 'Closed' and sideState == 'Closed':
-        event = GarageEvent.INIT_CLOSED
+        event = GarageEvent(GarageEventType.INIT_CLOSED, shadow)
       else:
-        event = GarageEvent.INIT_OPEN
+        event = GarageEvent(GarageEventType.INIT_OPEN, shadow)
 
-      self.handleEvent(event)
+      self.handleEvent(event, shadow)
 
       '''
         shadow['state']['reported']['State'],
@@ -92,42 +118,68 @@ class GarageMonitor(object):
     topic = message.topic
     self._logger.debug(topic)
     if topic.endswith('accepted'):
-      self.shadow = json.loads(message.payload)
-      self._logger.info('A shadow update was accepted:\n{}'.format(self.shadow))
+      shadow = json.loads(message.payload)
+      self._logger.info('A shadow update was accepted:\n{}'.format(shadow))
 
-      mainState = self.shadow['state']['reported']['State']
-      sideState = self.shadow['state']['reported']['SideDoorState']
-      stateUpdate = self.shadow['state']['reported']['StateUpdate']
+      if shadow['version'] <= self._message_index:
+        self._logger.info('Skipping repeat message with index {}'.format(shadow['version']))
+        return
+
+      mainState = shadow['state']['reported']['State']
+      sideState = shadow['state']['reported']['SideDoorState']
+      stateUpdate = shadow['state']['reported']['StateUpdate']
       event = None
       if stateUpdate:
         if mainState == 'Closed' and sideState == 'Closed':
-          event = GarageEvent.ALL_CLOSED
+          event = GarageEvent(GarageEventType.ALL_CLOSED, shadow)
         else:
-          event = GarageEvent.ANY_OPENED
+          event = GarageEvent(GarageEventType.ANY_OPENED, shadow)
       else:
         if mainState == 'Closed' and sideState == 'Closed':
           if self.state != GarageState.CLOSED:
-            event = GarageEvent.ALL_CLOSED
+            event = GarageEvent(GarageEventType.ALL_CLOSED, shadow)
           else:
-            event = GarageEvent.PERIODIC_UPDATE
+            event = GarageEvent(GarageEventType.PERIODIC_UPDATE, shadow)
         else:
           if self.state != GarageState.OPEN:
-            event = GarageEvent.ANY_OPENED
+            event = GarageEvent(GarageEventType.ANY_OPENED, shadow)
           else:
-            event = GarageEvent.PERIODIC_UPDATE
+            event = GarageEvent(GarageEventType.PERIODIC_UPDATE, shadow)
 
-      self.handleEvent(event)
+      self.handleEvent(event, shadow)
     elif topic.endswith('rejected'):
       self._logger.debug('A shadow update was rejected.')
     else:
       self._logger.warn('Received an unhandled update for topic {}.'.format(topic))
 
-  def sendEmail(self, init=False):
+  def sendEmail(self, shadow, init=False):
     self._logger.info('Sending email update...')
     intro = 'The garage door changed state'
     if init:
       intro = 'The garage door monitor was started'
-    published_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    published_at = datetime.now(tz=tz.tzlocal()).strftime("%Y-%m-%d %H:%M:%S %Z")
+    message = '''
+      {} at {}:
+      Main Door State: {}
+      Side Door State: {}
+      Temperature:     {} *C
+      Message Index:   {}
+      History:'''.format(intro, published_at,
+                shadow['state']['reported']['State'],
+                shadow['state']['reported']['SideDoorState'],
+                shadow['state']['reported']['Temperature'],
+                shadow['version'])
+    for datum in self.history:
+      gmt_timestamp = datetime.strptime(
+        datum['state']['reported']['Timestamp'],
+        '%Y-%m-%d %H:%M:%S').replace(
+          tzinfo=tz.tzutc())
+      local_timestamp = gmt_timestamp.astimezone(tz.tzlocal())
+      message += '\n      {} {} {}'.format(
+        datum['state']['reported']['State'],
+        datum['state']['reported']['SideDoorState'],
+        local_timestamp.strftime("%Y-%m-%d %H:%M:%S %Z"))
+    self._logger.info('Message:{}'.format(message))
     sg = sendgrid.SendGridAPIClient(apikey=self._config['sgkey'])
     data = {
       "personalizations": [
@@ -146,19 +198,15 @@ class GarageMonitor(object):
       "content": [
         {
           "type": "text/plain",
-          "value": '''
-                   {} at {}:
-                   Main Door State: {}
-                   Side Door State: {}
-                   Temperature:     {} *C
-                   '''.format(intro, published_at,
-                              self.shadow['state']['reported']['State'],
-                              self.shadow['state']['reported']['SideDoorState'],
-                              self.shadow['state']['reported']['Temperature'])
+          "value": message
         }
       ]
     }
-    sg.client.mail.send.post(request_body=data)
+    try:
+      sg.client.mail.send.post(request_body=data)
+    except Exception as e:
+      self._logger.error('Failed to send status email:\n{}'.format(e))
+
 
   def connect(self):
     with open('/etc/awsiot/config.json') as config_file:
