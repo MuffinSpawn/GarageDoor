@@ -4,13 +4,13 @@ import threading
 import time
 
 from garage.cpx import CircuitPlaygroundExpress
+from garage.omega import getSideDoorState
 
 logging.basicConfig(format='%(asctime)-15s %(message)s')
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 class GarageController(threading.Thread):
-  DATA_SIZE = 7
   STATE_NAMES = ['None', 'Activated',
                 'Closed', 'Closed/Activated',
                 'Open', 'Open/Activated', '', '',
@@ -54,10 +54,17 @@ class GarageController(threading.Thread):
 
           if (self._state & 0x01) == 0:  # not activated
             if new_state & 0x01:         # activate
-              logger.debug('Turning on relay.')
-              os.system('relay-exp 0 1')
+              if new_state > 3 or getSideDoorState() == 'Open'\
+                      or self.remotely_activated:
+                logger.debug('Turning on relay.')
+                os.system('relay-exp 0 1')
+              self.remotely_activated = False
               activation_count += 1
+            elif self.remotely_activated:
+              logger.info('Requesting Activation...')
+              cpx.requestActivation()
           elif self._state & 0x01:       # activated
+            self.remotely_activated = False
             if (new_state & 0x01) == 0:  # deactivate
               logger.debug('Turning off relay.')
               os.system('relay-exp 0 0')
@@ -71,11 +78,6 @@ class GarageController(threading.Thread):
           if new_temperature < 40.0:
             self._temperature = new_temperature
             # logger.debug('Temperature: {}*C'.format(temperature))
-
-          if self.remotely_activated:
-            self.remotely_activated = False
-            logger.info('Requesting Activation...')
-            cpx.requestActivation()
 
           time.sleep(0.1)
 

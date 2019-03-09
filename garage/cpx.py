@@ -4,9 +4,11 @@ from OmegaExpansion import onionI2C
 
 logging.basicConfig(format='%(asctime)-15s %(message)s')
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 class CircuitPlaygroundExpress():
+  DATA_SIZE = 7
+
   def __init__(self):
     self.i2c = onionI2C.OnionI2C(0)
 
@@ -17,7 +19,7 @@ class CircuitPlaygroundExpress():
     self.i2c.writeBytes(0x12, 0x00, [0xBB])
 
   @classmethod
-  def fletcher16(data):
+  def fletcher16(cls, data):
     # print(data)
     sum1 = int(0)
     sum2 = int(0)
@@ -27,8 +29,8 @@ class CircuitPlaygroundExpress():
     return (sum2 << 8) | sum1
 
   def getSensorData(self):
-    sensor_data = self.i2c.readBytes(0x12, 0x00, GarageController.DATA_SIZE)
-    calculated_checksum = GarageController.fletcher16(sensor_data[:-2])
+    sensor_data = self.i2c.readBytes(0x12, 0x00, CircuitPlaygroundExpress.DATA_SIZE)
+    calculated_checksum = CircuitPlaygroundExpress.fletcher16(sensor_data[:-2])
 
     checksum = 0
     data_length = len(sensor_data)-2

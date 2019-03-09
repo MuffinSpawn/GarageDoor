@@ -1,0 +1,8 @@
+# Put your custom commands here that should be executed once
+# the system init finished. By default this file does nothing.
+
+mkdir -p /var/log/GarageDoor
+/root/GarageDoor/garage_controller.py >> /var/log/GarageDoor/controller.log 2>&1 &
+/root/GarageDoor/garage_connector.py >> /var/log/GarageDoor/connector.log 2>&1 &
+
+exit 0
