@@ -1,0 +1,11 @@
+{
+	"sgkey": "<SENDGRID_API_KEY>",
+	"email": "muffinspawn@gmail.com",
+	"awshost": "a1qhgyhvs274m3-ats.iot.us-east-2.amazonaws.com",
+	"awsport": 8883,
+	"capath": "AmazonRootCA1.pem",
+	"keypath": "ef947d5601-private.pem.key",
+	"certpath": "ef947d5601-certificate.pem.crt.txt",
+	"clientid": "GarageMonitor"
+}
+

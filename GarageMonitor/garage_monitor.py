@@ -10,6 +10,7 @@ import re
 import subprocess
 import threading
 import time
+from tinydb import TinyDB
 
 from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
 import flask
@@ -68,7 +69,63 @@ class GarageMonitor(object):
     self.state = GarageState.UNKNOWN
     self.history = []
     self._message_index = 0
+    self._db = TinyDB('event_db.json')
 
+  '''
+  {
+    'state': {
+      'reported': {
+        'Omega-11A3': 0,
+        'NETGEAR63': 0,
+        'Temperature': 39.99,
+        'Timestamp': '2019-06-12 00:06:44',
+        'State': 'Closed',
+        'StateUpdate': False,
+        'SideDoorState': 'Closed'
+      }
+    },
+    'metadata': {
+      'reported': {
+        'Omega-11A3': {
+          'timestamp': 1560298654
+        },
+        'NETGEAR63': {
+          'timestamp': 1560298654
+        },
+        'Temperature': {
+          'timestamp': 1560298654
+        },
+        'Timestamp': {
+          'timestamp': 1560298654
+        },
+        'State': {
+          'timestamp': 1560298654
+        },
+        'StateUpdate': {
+          'timestamp': 1560298654
+        },
+        'SideDoorState': {
+          'timestamp': 1560298654
+        }
+      }
+    },
+    'version': 49348,
+    'timestamp': 1560298654
+  }
+
+
+    'state': {
+      'reported': {
+        'Omega-11A3': 0,
+        'NETGEAR63': 0,
+        'Temperature': 39.99,
+        'Timestamp': '2019-06-12 00:06:44',
+        'State': 'Closed',
+        'StateUpdate': False,
+        'SideDoorState': 'Closed'
+      }
+    },
+  '''
   def handleEvent(self, event, shadow):
     self._message_index = shadow['version']
     self._logger.info('Event: {}'.format(event.type))
@@ -80,6 +137,9 @@ class GarageMonitor(object):
       self.sendEmail(shadow, init=(event.type.value >= GarageEventType.INIT_OPEN.value))
     if self.state == GarageState.CLOSED:
       self.history = []
+    record = shadow['state']['reported']
+    record['version'] = shadow['version']
+    self._db.insert(record)
 
   def onlineCallback(self, client):
     self._logger.warn('Connected to AWS IoT')
@@ -106,13 +166,6 @@ class GarageMonitor(object):
         event = GarageEvent(GarageEventType.INIT_OPEN, shadow)
 
       self.handleEvent(event, shadow)
-
-      '''
-        shadow['state']['reported']['State'],
-        shadow['state']['reported']['SideDoorState'],
-        shadow['state']['reported']['Temperature'],
-        shadow['state']['reported']['Omega-11A3']))
-      '''
     elif topic.endswith('rejected'):
       self._logger.error('The status request was rejected.')
     else:
@@ -185,7 +238,7 @@ class GarageMonitor(object):
         datum['state']['reported']['SideDoorState'],
         local_timestamp.strftime("%Y-%m-%d %H:%M:%S %Z"))
     self._logger.info('Message:{}'.format(message))
-    sg = sendgrid.SendGridAPIClient(apikey=self._config['sgkey'])
+    sg = sendgrid.SendGridAPIClient(self._config['sgkey'])
     data = {
       "personalizations": [
         {
@@ -214,7 +267,7 @@ class GarageMonitor(object):
 
 
   def connect(self):
-    with open('/etc/awsiot/config.json') as config_file:
+    with open('config.json') as config_file:
       self._config = json.load(config_file)
     aws_host = self._config['awshost']
     aws_port = self._config['awsport']
