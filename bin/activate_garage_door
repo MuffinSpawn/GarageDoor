@@ -4,16 +4,16 @@ import requests
 import time
 
 def main():
-  r = requests.get('http://localhost:5000/json')
+  r = requests.get('http://localhost:5000/json/')
   initial_state = r.json()['state']
   print('State: {}'.format(initial_state))
-  r = requests.put("http://localhost:5000/activate")
   desired_state = 'Closed'
   if initial_state == 'Closed':
-    desired_state = 'OpenFully'
+    desired_state = 'FullyOpen'
   state = initial_state
+  r = requests.put("http://localhost:5000/activate/")
   while state != desired_state:
-    r = requests.get('http://localhost:5000/json')
+    r = requests.get('http://localhost:5000/json/')
     state = r.json()['state']
     print('State: {}'.format(state))
     time.sleep(1)
