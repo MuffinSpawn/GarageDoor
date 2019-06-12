@@ -5,7 +5,7 @@ import time
 
 import flask
 
-from garage.monitor import GarageMonitor
+from garage.monitor import GarageMonitor, GarageState
 
 logging.basicConfig(format='%(asctime)-15s %(message)s')
 
