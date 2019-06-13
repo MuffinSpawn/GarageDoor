@@ -130,20 +130,27 @@ class GarageMonitor(object):
       self.sendEmail(shadow, init=(event.type.value >= GarageEventType.INIT_OPEN.value))
     if self.state == GarageState.EXTENDED_OPEN:
       self.sendEmail(shadow, init=(event.type.value >= GarageEventType.INIT_OPEN.value))
-      timestamps = [shadow['timestamp'] for shadow in history if \
-        shadow['state']['reported']['SideDoorState'] == 'Closed' and \
-        shadow['state']['reported']['SideDoorState'] != 'Closed']
-      open_time = timestamps[-1] - timestamps[0]
-      if open_time > 1800:  # open for more than 30 minutes
-        requests.put('http://{}:5000/activate/'.format(self._config['CONTROLLER_IP']))
+      timestamps = []
+      for shadow in self.history:
+        timestamp = datetime.strptime(shadow['state']['reported']['Timestamp'], '%Y-%m-%d %H:%M:%S').timestamp()
+        if shadow['state']['reported']['SideDoorState'] == 'Closed' and \
+           shadow['state']['reported']['State'] == 'FullyOpen':
+          timestamps.append(timestamp)
+      self._logger.debug('Timestamps:\n{}'.format(timestamps))
+      if len(timestamps) >= 2:
+        open_time = timestamps[-1] - timestamps[0]
+        self._logger.debug('Open Time: {}'.format(open_time))
+        if open_time >= GarageMonitor.timeout_duration:  # open for more than 10 minutes
+          self._logger.info('Garage was left open! Closing...')
+          requests.put('http://{}:5000/activate/'.format(self._config['controller_ip']))
 
     if self.state == GarageState.CLOSED:
       self.history = []
     record = shadow['state']['reported']
     record['version'] = shadow['version']
     record['timestamp'] = datetime.strptime(record['Timestamp'], '%Y-%m-%d %H:%M:%S').replace(
-      tzinfo=tz.tzutc())
-  self._db.insert(record)
+      tzinfo=tz.tzutc()).timestamp()
+    self._db.insert(record)
 
   def onlineCallback(self, client):
     self._logger.warn('Connected to AWS IoT')
