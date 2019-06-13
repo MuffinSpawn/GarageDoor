@@ -1,0 +1,19 @@
+[[source]]
+url = "https://pypi.org/simple"
+name = "pypi"
+verify_ssl = true
+
+[requires]
+python_version = "3.7"
+
+[packages]
+flask = "*"
+pytest = "*"
+flask-cors = "*"
+python-dotenv = "*"
+ipython = "*"
+requests = "*"
+tinydb = "*"
+AWSIoTPythonSDK = "*"
+sendgrid = "*"
+pytz = "*"

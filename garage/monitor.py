@@ -5,8 +5,6 @@ import json
 import logging
 import os
 import re
-import subprocess
-import threading
 import time
 from tinydb import TinyDB
 
@@ -134,7 +132,9 @@ class GarageMonitor(object):
       self.history = []
     record = shadow['state']['reported']
     record['version'] = shadow['version']
-    self._db.insert(record)
+    record['timestamp'] = datetime.strptime(record['Timestamp'], '%Y-%m-%d %H:%M:%S').replace(
+      tzinfo=tz.tzutc())
+  self._db.insert(record)
 
   def onlineCallback(self, client):
     self._logger.warn('Connected to AWS IoT')
