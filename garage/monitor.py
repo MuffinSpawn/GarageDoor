@@ -45,7 +45,8 @@ class GarageEvent():
     self.shadow = shadow
 
 class GarageMonitor(object):
-  # Events: any opened, all closed, periodic update, 
+  # Rows == GarageState
+  # Columns == GarageEventType
   transition_table = [[GarageState.OPEN,          GarageState.CLOSED, GarageState.UNKNOWN, GarageState.OPEN, GarageState.CLOSED],
                       [GarageState.OPEN,          GarageState.CLOSED, GarageState.CLOSED, GarageState.UNKNOWN, GarageState.UNKNOWN],
                       [GarageState.OPEN,          GarageState.CLOSED, GarageState.EXTENDED_OPEN, GarageState.UNKNOWN, GarageState.UNKNOWN],
