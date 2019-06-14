@@ -126,16 +126,19 @@ class GarageMonitor(object):
     self.state = self.transition_table[self.state.value][event.type.value]
     self._logger.info('Last State: {}\tCurrent State: {}'.format(last_state, self.state))
     self.history.append(shadow)
-    if last_state != self.state:
+
+    if last_state != self.state or self.state == GarageState.EXTENDED_OPEN:
       self.sendEmail(shadow, init=(event.type.value >= GarageEventType.INIT_OPEN.value))
+
     if self.state == GarageState.EXTENDED_OPEN:
-      self.sendEmail(shadow, init=(event.type.value >= GarageEventType.INIT_OPEN.value))
       timestamps = []
       for shadow in self.history:
         timestamp = datetime.strptime(shadow['state']['reported']['Timestamp'], '%Y-%m-%d %H:%M:%S').timestamp()
         if shadow['state']['reported']['SideDoorState'] == 'Closed' and \
            shadow['state']['reported']['State'] == 'FullyOpen':
           timestamps.append(timestamp)
+        elif len(timestamps) > 0:
+          timestamps = []
       self._logger.debug('Timestamps:\n{}'.format(timestamps))
       if len(timestamps) >= 2:
         open_time = timestamps[-1] - timestamps[0]
